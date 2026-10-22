@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIGrasp</title>
+<style>
+:root {
+  --bg: #0e1116; --panel: #141920; --panel2: #1a2029; --line: #262d38; --text: #d7dde6; --dim: #8b96a5; --faint: #5c6673;
+  --accent: #9a8cff; --accent-bg: rgba(154, 140, 255, .10); --accent-line: rgba(154, 140, 255, .45);
+  --add-bg: rgba(63, 185, 80, .13); --add-hl: rgba(63, 185, 80, .40); --add-tx: #56d364;
+  --del-bg: rgba(248, 81, 73, .13); --del-hl: rgba(248, 81, 73, .42); --del-tx: #ff8078;
+  --kw: #7aa2f7; --ty: #4fc1d9; --st: #e0af68; --cm: #6b7686; --nu: #f2a271; --fn: #d2b3ff; --ky: #7aa2f7; --pp: #b99bf2;
+  --mono: "Cascadia Code", "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace;
+  --row: 20px;
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f7; --panel: #ffffff; --panel2: #f0f2f5; --line: #dde1e6; --text: #1f2328; --dim: #5b6470; --faint: #8b949e;
+  --accent: #6a56e0; --accent-bg: rgba(106, 86, 224, .07); --accent-line: rgba(106, 86, 224, .40);
+  --add-bg: rgba(46, 160, 67, .15); --add-hl: rgba(46, 160, 67, .38); --add-tx: #1a7f37;
+  --del-bg: rgba(255, 90, 80, .14); --del-hl: rgba(255, 90, 80, .38); --del-tx: #c62828;
+  --kw: #2f5fd0; --ty: #0b7285; --st: #9a6700; --cm: #7a828c; --nu: #b35900; --fn: #7a3fc4; --ky: #2f5fd0; --pp: #7a3fc4;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 "Segoe UI", system-ui, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+button, input { font: inherit; color: inherit; }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--faint); }
+button.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent); }
+button.ghost { background: transparent; border-color: transparent; }
+button.ghost:hover { background: var(--panel2); }
+button:disabled { opacity: .4; cursor: default; }
+input[type=text] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; width: 100%; outline: none; }
+input[type=text]:focus { border-color: var(--accent-line); }
+kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--dim); background: var(--panel2); }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Top bar */
+#top { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+#top .brand { font-weight: 650; letter-spacing: .2px; }
+#top .brand span { color: var(--accent); }
+#repoBtn { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#branch { color: var(--dim); font: 12px var(--mono); }
+#top .grow { flex: 1; }
+#status { color: var(--dim); font-size: 12px; }
+#status.err { color: var(--del-tx); }
+
+#app { flex: 1; display: flex; min-height: 0; }
+
+/* Sidebar */
+#side { width: 340px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; }
+body.noside #side { display: none; }
+.sec-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 6px; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; }
+.sec-head .grow { flex: 1; }
+.sec-head label { text-transform: none; letter-spacing: 0; font-size: 12px; display: flex; gap: 5px; align-items: center; cursor: pointer; }
+.sec-tools { padding: 0 10px 8px; }
+#commits { flex: 0 1 38%; min-height: 120px; overflow: auto; border-bottom: 1px solid var(--line); }
+#files { flex: 1; overflow: auto; min-height: 0; }
+.commit { padding: 6px 10px; cursor: pointer; border-left: 3px solid transparent; }
+.commit:hover, .file:hover { background: var(--panel2); }
+.commit.sel, .file.sel { background: var(--accent-bg); border-left-color: var(--accent); }
+.commit .subj { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commit .meta { color: var(--dim); font-size: 11px; display: flex; gap: 8px; }
+.commit .meta .h { font-family: var(--mono); }
+.commit.work .subj { color: var(--st); }
+.more { display: block; margin: 8px auto; }
+#chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 10px 8px; }
+.chip { font: 11px var(--mono); padding: 2px 7px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; user-select: none; }
+.chip b { font-weight: 400; color: var(--dim); margin-left: 4px; }
+.chip.off { opacity: .45; text-decoration: line-through; background: transparent; }
+.chip.all { font-family: inherit; color: var(--accent); border-color: transparent; background: transparent; }
+.file { display: flex; align-items: center; gap: 7px; padding: 4px 10px; cursor: pointer; border-left: 3px solid transparent; }
+.file .st { font: 600 10px var(--mono); width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; flex: none; }
+.st.A { color: var(--add-tx); background: var(--add-bg); } .st.D { color: var(--del-tx); background: var(--del-bg); }
+.st.M { color: var(--st); background: rgba(224, 175, 104, .14); } .st.R, .st.C { color: var(--accent); background: var(--accent-bg); }
+.file .nm { flex: 1; min-width: 0; }
+.file .nm .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file .nm .d { color: var(--faint); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.file .cnt { font: 11px var(--mono); white-space: nowrap; }
+.file .cnt .a { color: var(--add-tx); } .file .cnt .r { color: var(--del-tx); margin-left: 4px; }
+.file .nt { color: var(--accent); font-size: 11px; flex: none; }
+.empty { color: var(--faint); padding: 14px 12px; }
+
+/* Main */
+#main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#filebar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+#filebar .path { font: 12.5px var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#filebar .path .dir { color: var(--dim); }
+#filebar .grow { flex: 1; }
+#filebar .cnt { font: 12px var(--mono); white-space: nowrap; }
+#filebar .cnt .a { color: var(--add-tx); } #filebar .cnt .r { color: var(--del-tx); margin-left: 6px; }
+#filebar .sep { width: 1px; height: 18px; background: var(--line); }
+#split { flex: 1; display: flex; min-height: 0; --r: .5; }
+.wrap { display: flex; flex-direction: column; min-width: 0; position: relative; }
+#wl { flex: 0 0 calc(var(--r) * 100% - 3px); }
+#wr { flex: 1; }
+.ptitle { flex: none; display: flex; gap: 8px; align-items: baseline; padding: 4px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); background: var(--panel2); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.ptitle small { text-transform: none; letter-spacing: 0; font: 11px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
+#divider { flex: 0 0 6px; cursor: col-resize; background: var(--line); position: relative; }
+#divider:hover, #divider.drag { background: var(--accent); }
+#divider::after { content: ""; position: absolute; inset: 0 -4px; }
+.pane { flex: 1; overflow: scroll; min-height: 0; font: 13px/var(--row) var(--mono); tab-size: 4; --pw: 600px; }
+#wr .pane { margin-right: 12px; }
+.inner { display: table; min-width: 100%; }
+.row { display: block; height: var(--row); white-space: pre; }
+.ln { position: sticky; left: 0; display: inline-block; min-width: var(--gw, 44px); padding: 0 8px 0 10px; text-align: right; color: var(--faint); background: var(--bg); user-select: none; z-index: 1; }
+.mk { position: sticky; left: var(--gw, 44px); display: inline-block; width: 16px; text-align: center; background: var(--bg); user-select: none; z-index: 1; color: var(--faint); }
+.tx { padding-right: 24px; }
+.row.add { background: var(--add-bg); } .row.add .ln, .row.add .mk { background: color-mix(in srgb, var(--bg) 82%, #3fb950); color: var(--add-tx); }
+.row.del { background: var(--del-bg); } .row.del .ln, .row.del .mk { background: color-mix(in srgb, var(--bg) 82%, #f85149); color: var(--del-tx); }
+.row.add .x { background: var(--add-hl); border-radius: 2px; } .row.del .x { background: var(--del-hl); border-radius: 2px; }
+#right .row.del .tx { opacity: .9; }
+.row.fill { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--panel2) 6px 7px); }
+.row.gap { position: sticky; left: 0; width: var(--pw); height: 26px; line-height: 26px; text-align: center; color: var(--dim); background: var(--panel2); border-block: 1px solid var(--line); cursor: pointer; font: 12px "Segoe UI", system-ui, sans-serif; white-space: nowrap; overflow: hidden; }
+.row.gap:hover { color: var(--text); }
+.row.note, .row.sp { height: auto; white-space: normal; }
+.row.note { position: sticky; left: 0; width: var(--pw); padding: 6px 14px 8px 10px; }
+.card { font: 13px/1.5 "Segoe UI", system-ui, sans-serif; background: var(--accent-bg); border: 1px solid var(--accent-line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 12px; max-width: 860px; }
+.card .t { font-weight: 650; color: var(--accent); display: flex; gap: 8px; align-items: baseline; }
+.card .t small { font-weight: 400; color: var(--dim); font-size: 11px; margin-left: auto; white-space: nowrap; }
+.card p { margin: 4px 0 0; } .card ul { margin: 4px 0 0; padding-left: 18px; }
+.card code, .ov code { font: 12px var(--mono); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.card code.ref, .ov code.ref { cursor: pointer; color: var(--accent); border-color: var(--accent-line); text-decoration: underline dotted; text-underline-offset: 3px; }
+.card code.ref:hover, .ov code.ref:hover { background: var(--accent-bg); }
+.row.flash .tx { animation: flash 1.8s ease-out; }
+@keyframes flash { from { background: var(--accent-line); } to { background: transparent; } }
+.card.sum { border-left-color: var(--st); border-color: rgba(224, 175, 104, .4); background: rgba(224, 175, 104, .07); }
+.card.sum .t { color: var(--st); }
+.row.noted .ln { box-shadow: inset 3px 0 0 var(--accent); }
+body.nonotes .row.note, body.nonotes .row.sp { display: none; }
+.kw { color: var(--kw); } .ty { color: var(--ty); } .st { color: var(--st); } .cm { color: var(--cm); font-style: italic; }
+.nu { color: var(--nu); } .fn { color: var(--fn); } .ky { color: var(--ky); } .pp { color: var(--pp); }
+.file .st, .commit .st { font-style: normal; }
+#ruler { position: absolute; right: 0; top: 25px; bottom: 11px; width: 12px; background: var(--panel); border-left: 1px solid var(--line); cursor: pointer; }
+#ruler i { position: absolute; left: 2px; right: 2px; min-height: 2px; border-radius: 1px; }
+#ruler i.a { background: var(--add-tx); } #ruler i.d { background: var(--del-tx); } #ruler i.n { background: var(--accent); left: 0; right: 7px; }
+#ruler .thumb { position: absolute; left: 0; right: 0; background: var(--text); opacity: .13; pointer-events: none; }
+#stale { display: none; flex: none; padding: 5px 12px; background: rgba(224, 175, 104, .12); color: var(--st); border-bottom: 1px solid var(--line); font-size: 12px; }
+
+/* Overview page */
+#overview { flex: 1; overflow: auto; padding: 26px 34px 60px; }
+.ov { max-width: 900px; margin: 0 auto; }
+.ov h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
+.ov .meta { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+.ov .meta .h { font-family: var(--mono); }
+.ov h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); margin: 24px 0 8px; font-weight: 600; }
+.ov .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; line-height: 1.6; font-size: 14px; }
+.ov .box h3 { margin: 0 0 6px; font-size: 15px; color: var(--accent); }
+.ov .box p { margin: 6px 0; } .ov .box ul { margin: 6px 0; padding-left: 20px; }
+.ov .item { display: flex; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: var(--panel); cursor: pointer; align-items: baseline; }
+.ov .item:hover { border-color: var(--accent-line); }
+.ov .item .p { font: 12.5px var(--mono); white-space: nowrap; }
+.ov .item .s { color: var(--dim); flex: 1; min-width: 0; }
+.ov .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; color: var(--dim); }
+.msg { margin: auto; color: var(--dim); text-align: center; padding: 30px; }
+.msg button { margin-top: 12px; }
+
+/* Repository dialog */
+#modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: none; place-items: center; z-index: 10; }
+#modal.open { display: grid; }
+#modal .dlg { width: min(640px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+#modal h2 { margin: 0 0 12px; font-size: 16px; }
+#modal .rowf { display: flex; gap: 8px; }
+#modal .recent { margin-top: 14px; max-height: 40vh; overflow: auto; }
+#modal .recent div { padding: 6px 8px; border-radius: 6px; cursor: pointer; font: 12.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#modal .recent div:hover { background: var(--panel2); }
+#modal .err { color: var(--del-tx); margin-top: 8px; min-height: 18px; }
+#modal .foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header id="top">
+  <button class="ghost" id="sideBtn" data-tt="sidebarTip">☰</button>
+  <div class="brand"><span>AI</span>Grasp</div>
+  <button id="repoBtn"></button>
+  <span id="branch"></span>
+  <span class="grow"></span>
+  <span id="status"></span>
+  <button class="ghost" id="langBtn" title="Language / Lingua"></button>
+  <button class="ghost" id="themeBtn" data-tt="themeTip">◐</button>
+  <button id="fullBtn" data-tt="fullTip"></button>
+</header>
+
+<div id="app">
+  <aside id="side">
+    <div class="sec-head"><span data-t="commits"></span><span class="grow"></span><label><input type="checkbox" id="allBranches"> <span data-t="allBranches"></span></label></div>
+    <div class="sec-tools"><input type="text" id="commitSearch" data-tp="searchCommits"></div>
+    <div id="commits"></div>
+    <div class="sec-head"><span data-t="files"></span><span class="grow"></span><span id="fileCount"></span></div>
+    <div class="sec-tools"><input type="text" id="fileSearch" data-tp="filterFiles"></div>
+    <div id="chips"></div>
+    <div id="files"></div>
+  </aside>
+
+  <main id="main">
+    <div id="filebar">
+      <button id="ovBtn" data-tt="overviewTip" data-t="overview"></button>
+      <button id="backBtn" data-tt="backTip" data-t="back" disabled></button>
+      <button id="prevFile" data-tt="prevFileTip">↑ file</button>
+      <button id="nextFile" data-tt="nextFileTip">↓ file</button>
+      <span class="sep"></span>
+      <span class="path" id="path"></span>
+      <span class="cnt" id="cnt"></span>
+      <span class="grow"></span>
+      <button id="prevChg" data-tt="prevChangeTip" data-t="prevChange"></button>
+      <button id="nextChg" data-tt="nextChangeTip" data-t="nextChange"></button>
+      <span class="sep"></span>
+      <button id="modeBtn" data-tt="modeTip" data-t="wholeFile"></button>
+      <button id="notesBtn" class="on" data-tt="notesTip" data-t="notes"></button>
+    </div>
+    <div id="stale" data-t="stale"></div>
+    <div id="split" style="display:none">
+      <section class="wrap" id="wl"><div class="ptitle"><span data-t="original"></span> <small id="lt"></small></div><div class="pane" id="left"></div></section>
+      <div id="divider" data-tt="dividerTip"></div>
+      <section class="wrap" id="wr"><div class="ptitle"><span data-t="modified"></span> <small id="rt"></small></div><div class="pane" id="right"></div><div id="ruler"></div></section>
+    </div>
+    <div id="overview"></div>
+  </main>
+</div>
+
+<div id="modal"><div class="dlg">
+  <h2 data-t="whichRepo"></h2>
+  <div class="rowf"><input type="text" id="repoPath" data-tp="repoPlaceholder"><button id="browse" data-t="browse"></button><button id="openRepo" class="on" data-t="open"></button></div>
+  <div class="err" id="repoErr"></div>
+  <div class="recent" id="recent"></div>
+  <div class="foot"><button class="ghost" id="closeModal" data-t="close"></button></div>
+</div></div>
+
+<script nonce="__NONCE__">
+'use strict';
+// The key of this run arrives in the address the server opens (#t=...). It is kept for this tab only and taken
+// out of the address bar. The page itself contains no secret: anyone can load it, only this tab can use the API.
+let TOKEN = sessionStorage.getItem('ai.token') || '';
+(function () {
+  const given = new URLSearchParams(location.hash.slice(1)).get('t');
+  if (given) { TOKEN = given; sessionStorage.setItem('ai.token', given); history.replaceState(null, '', location.pathname); }
+})();
+const WORKING = 'WORKING';
+const $ = id => document.getElementById(id);
+
+// ---------------------------------------------------------------------------------------------------------------
+// The words of the page, in each language. English is the one used when a language lacks a text.
+// ---------------------------------------------------------------------------------------------------------------
+const TEXT = {
+  en: {
+    sidebarTip: 'Show or hide the sidebar (B)', themeTip: 'Light or dark theme', fullTip: 'Full screen (F)',
+    fullscreen: 'Full screen', exitFullscreen: 'Exit full screen',
+    commits: 'Commits', allBranches: 'all branches', searchCommits: 'Search commit messages…',
+    files: 'Files', filterFiles: 'Filter by name or path…',
+    overview: 'Overview', overviewTip: 'Overview of the commit (O)',
+    back: '← Back', backTip: 'Go back to where you were before following a reference (Backspace)',
+    prevFileTip: 'Previous file (↑)', nextFileTip: 'Next file (↓)',
+    prevChange: '▲ change', prevChangeTip: 'Previous change (P)', nextChange: '▼ change', nextChangeTip: 'Next change (N)',
+    wholeFile: 'Whole file', changesOnly: 'Changes only', modeTip: 'The whole file, or only the changed parts with some context',
+    notes: 'Notes', notesTip: 'Show or hide the explanations',
+    stale: 'These notes were written for another version of the file: the lines they point to may no longer match.',
+    original: 'Original', modified: 'Modified', dividerTip: 'Drag to resize, double click to go back to the middle',
+    whichRepo: 'Which repository do you want to look at?', repoPlaceholder: 'C:\\path\\to\\the\\repository',
+    browse: 'Browse…', open: 'Open', close: 'Close',
+    noKey: 'This tab does not have the key of this session: open AIGrasp from the address shown in the terminal.',
+    loading: 'Loading…', chooseRepo: 'Choose a repository…', changeRepo: 'Change repository',
+    uncommitted: 'Changes not committed yet', workingFolder: 'working folder',
+    moreCommits: 'Load more commits', noCommits: 'No commits found.',
+    noExtension: '(no extension)', chipTip: 'Click: show or hide. Alt+click: show only this type', showAll: 'show all',
+    countOf: '{0} of {1}', binary: 'binary', withNotes: 'With explanations',
+    allHidden: 'Every file is hidden by the filters.', noFiles: 'No file changed.',
+    pickToStart: 'Choose a repository to begin.', noCommit: 'No commit',
+    workingMeta: 'What is in the working folder compared with the last commit', fileCount: '{0} files',
+    notesUnreadable: 'The notes file {0} cannot be read: {1}',
+    aboutTokens: '≈ {0} tokens',
+    notesCost: 'Tokens spent writing notes: ≈ {0} for this commit ({1} notes files, {2} of them replaced by later ones), ≈ {3} for the whole repository ({4} files).',
+    notesCostTip: 'Characters of the notes files divided by {0}: an estimate of what the assistant wrote, not a count. Reading files and running the commands cost more.',
+    explainedFiles: 'Files with explanations', explanations: 'Explanations',
+    noNotes: 'There are no notes for this commit. The changes are still there: pick a file from the list on the left.',
+    keys: 'Keys', keyFiles: 'next and previous file', keyChanges: 'next and previous change in the file', keyFull: 'full screen',
+    keySidebar: 'show or hide the sidebar', keyOverview: 'back to this overview',
+    keyBack: 'back to where you were before following a reference (the underlined names in the notes)',
+    refLine: ', line {0}', refOld: ' (original version)', refUnchanged: ' · not changed by this commit',
+    isBinary: 'A binary file: there is no text to compare.', tooLarge: 'The file is {0} MB.', loadAnyway: 'Load it anyway',
+    didNotExist: 'the file did not exist', beforeCommit: 'before the commit', wasDeleted: 'the file was deleted',
+    unchangedFile: 'this commit did not change the file', inThisFile: 'In this file',
+    gap: '⋯ {0} unchanged lines · click to show them ⋯', removedLines: 'removed lines ', lines: 'lines ', note: 'Note',
+    pickerOpen: 'A window to choose the folder has opened…',
+  },
+  it: {
+    sidebarTip: 'Mostra o nascondi la barra laterale (B)', themeTip: 'Tema chiaro o scuro', fullTip: 'Schermo intero (F)',
+    fullscreen: 'Schermo intero', exitFullscreen: 'Esci da schermo intero',
+    commits: 'Commit', allBranches: 'tutti i branch', searchCommits: 'Cerca nei messaggi dei commit…',
+    files: 'File', filterFiles: 'Filtra per nome o percorso…',
+    overview: 'Riepilogo', overviewTip: 'Riepilogo del commit (O)',
+    back: '← Indietro', backTip: 'Torna dove eri prima di seguire un riferimento (Backspace)',
+    prevFileTip: 'File precedente (↑)', nextFileTip: 'File successivo (↓)',
+    prevChange: '▲ modifica', prevChangeTip: 'Modifica precedente (P)', nextChange: '▼ modifica', nextChangeTip: 'Modifica successiva (N)',
+    wholeFile: 'File intero', changesOnly: 'Solo modifiche', modeTip: 'Tutto il file, oppure solo le parti modificate con un po\' di contesto',
+    notes: 'Note', notesTip: 'Mostra o nascondi le spiegazioni',
+    stale: 'Queste note sono state scritte per un\'altra versione del file: le righe indicate potrebbero non coincidere più.',
+    original: 'Originale', modified: 'Modificato', dividerTip: 'Trascina per ridimensionare, doppio clic per tornare a metà',
+    whichRepo: 'Quale repository vuoi guardare?', repoPlaceholder: 'C:\\percorso\\del\\repository',
+    browse: 'Sfoglia…', open: 'Apri', close: 'Chiudi',
+    noKey: 'Questa scheda non ha la chiave della sessione: apri AIGrasp dall\'indirizzo che compare nel terminale.',
+    loading: 'Carico…', chooseRepo: 'Scegli un repository…', changeRepo: 'Cambia repository',
+    uncommitted: 'Modifiche non ancora committate', workingFolder: 'cartella di lavoro',
+    moreCommits: 'Carica altri commit', noCommits: 'Nessun commit trovato.',
+    noExtension: '(senza estensione)', chipTip: 'Clic: mostra o nascondi. Alt+clic: mostra solo questo tipo', showAll: 'mostra tutti',
+    countOf: '{0} di {1}', binary: 'binario', withNotes: 'Con spiegazione',
+    allHidden: 'Tutti i file sono nascosti dai filtri.', noFiles: 'Nessun file modificato.',
+    pickToStart: 'Scegli un repository per cominciare.', noCommit: 'Nessun commit',
+    workingMeta: 'Quello che c\'è nella cartella di lavoro rispetto all\'ultimo commit', fileCount: '{0} file',
+    notesUnreadable: 'Il file di note {0} non si legge: {1}',
+    aboutTokens: '≈ {0} token',
+    notesCost: 'Token spesi per scrivere le note: ≈ {0} per questo commit ({1} file di note, di cui {2} sostituiti da altri più recenti), ≈ {3} per tutto il repository ({4} file).',
+    notesCostTip: 'I caratteri dei file di note divisi per {0}: una stima di quanto ha scritto l\'assistente, non un conteggio. Leggere i file e lanciare i comandi costa di più.',
+    explainedFiles: 'File con spiegazione', explanations: 'Spiegazioni',
+    noNotes: 'Per questo commit non ci sono note. Le modifiche si vedono comunque: scegli un file dalla lista a sinistra.',
+    keys: 'Tasti', keyFiles: 'file successivo e precedente', keyChanges: 'modifica successiva e precedente nel file', keyFull: 'schermo intero',
+    keySidebar: 'mostra o nasconde la barra laterale', keyOverview: 'torna a questo riepilogo',
+    keyBack: 'torna dove eri prima di seguire un riferimento (i nomi sottolineati nelle note)',
+    refLine: ', riga {0}', refOld: ' (versione originale)', refUnchanged: ' · non modificato da questo commit',
+    isBinary: 'È un file binario: non c\'è testo da confrontare.', tooLarge: 'Il file pesa {0} MB.', loadAnyway: 'Caricalo comunque',
+    didNotExist: 'il file non esisteva', beforeCommit: 'prima del commit', wasDeleted: 'il file è stato cancellato',
+    unchangedFile: 'questo commit non ha modificato il file', inThisFile: 'In questo file',
+    gap: '⋯ {0} righe invariate · clic per mostrarle ⋯', removedLines: 'righe rimosse ', lines: 'righe ', note: 'Nota',
+    pickerOpen: 'Si è aperta una finestra per scegliere la cartella…',
+  },
+};
+let LANG = 'en';
+function t(key, ...values) {
+  let text = TEXT[LANG][key] || TEXT.en[key] || key;
+  values.forEach((value, index) => { text = text.replace('{' + index + '}', value); });
+  return text;
+}
+// The fixed parts of the page name their text with data-t (content), data-tt (tooltip) and data-tp (placeholder)
+function applyLanguage(language) {
+  LANG = TEXT[language] ? language : 'en';
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-t]').forEach(e => { e.textContent = t(e.dataset.t); });
+  document.querySelectorAll('[data-tt]').forEach(e => { e.title = t(e.dataset.tt); });
+  document.querySelectorAll('[data-tp]').forEach(e => { e.placeholder = t(e.dataset.tp); });
+  $('langBtn').textContent = LANG.toUpperCase();
+  updateFullButton();
+}
+function updateFullButton() {
+  $('fullBtn').classList.toggle('on', !!document.fullscreenElement);
+  $('fullBtn').textContent = t(document.fullscreenElement ? 'exitFullscreen' : 'fullscreen');
+}
+const S = {
+  state: null, commits: [], dirty: false, commit: null, files: [], overviews: [], notesCost: null, file: null, data: null,
+  view: [], changes: [], expanded: new Set(), skip: 0, back: [], reveal: false,
+  hidden: new Set(JSON.parse(localStorage.getItem('ai.hidden') || '[".meta"]')),
+  mode: localStorage.getItem('ai.mode') || 'full',
+};
+
+// ---------------------------------------------------------------------------------------------------------------
+// Talking to the server
+// ---------------------------------------------------------------------------------------------------------------
+async function api(name, params, body) {
+  const options = { headers: { 'X-Token': TOKEN } };
+  if (body) { options.method = 'POST'; options.body = JSON.stringify(body); }
+  const response = await fetch('/api/' + name + '?' + new URLSearchParams(params || {}), options);
+  if (response.status === 403) throw new Error(t('noKey'));
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+function status(text, isError) { $('status').textContent = text || ''; $('status').className = isError ? 'err' : ''; }
+async function guarded(work) {
+  try { status(t('loading')); await work(); status(''); }
+  catch (error) { status(error.message, true); }
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---------------------------------------------------------------------------------------------------------------
+// Repository
+// ---------------------------------------------------------------------------------------------------------------
+function applyState(state) {
+  S.state = state;
+  $('repoBtn').textContent = state.repo ? state.name : t('chooseRepo');
+  $('repoBtn').title = state.repo || t('changeRepo');
+  $('branch').textContent = state.branch ? '⎇ ' + state.branch : '';
+  document.title = state.repo ? state.name + ' · AIGrasp' : 'AIGrasp';
+}
+function openModal(message) {
+  $('repoPath').value = S.state && S.state.repo || '';
+  $('repoErr').textContent = message || '';
+  $('recent').innerHTML = (S.state && S.state.recent || []).map(r => '<div>' + esc(r) + '</div>').join('');
+  $('modal').classList.add('open');
+  $('repoPath').focus();
+}
+async function chooseRepo(path) {
+  try {
+    applyState(await api('repo', { path }));
+    $('modal').classList.remove('open');
+    S.commit = null; S.file = null;
+    await loadCommits(true);
+  } catch (error) { $('repoErr').textContent = error.message; }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Commits
+// ---------------------------------------------------------------------------------------------------------------
+async function loadCommits(reset) {
+  if (reset) { S.commits = []; S.skip = 0; }
+  const data = await api('commits', { limit: 80, skip: S.skip, all: $('allBranches').checked ? 1 : 0, q: $('commitSearch').value });
+  if (reset) S.dirty = data.dirty;
+  S.commits = S.commits.concat(data.commits);
+  S.skip += data.commits.length;
+  S.moreCommits = data.commits.length === 80;
+  renderCommits();
+  if (reset && !S.commit) {
+    if (S.dirty && !$('commitSearch').value) await selectCommit(WORKING);
+    else if (S.commits.length) await selectCommit(S.commits[0].hash);
+    else { S.files = []; renderFiles(); showOverview(); }
+  }
+}
+function when(iso) {
+  const d = new Date(iso);
+  const locale = LANG === 'it' ? 'it-IT' : 'en-GB';
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+function renderCommits() {
+  let html = '';
+  if (S.dirty && !$('commitSearch').value)
+    html += '<div class="commit work' + (S.commit === WORKING ? ' sel' : '') + '" data-h="' + WORKING + '"><div class="subj">' + esc(t('uncommitted')) + '</div><div class="meta"><span>' + esc(t('workingFolder')) + '</span></div></div>';
+  for (const c of S.commits)
+    html += '<div class="commit' + (S.commit === c.hash ? ' sel' : '') + '" data-h="' + c.hash + '"><div class="subj" title="' + esc(c.subject) + '">' + esc(c.subject) + '</div>' +
+      '<div class="meta"><span class="h">' + c.short + '</span><span>' + when(c.date) + '</span><span>' + esc(c.author) + '</span></div></div>';
+  if (S.moreCommits) html += '<button class="more" id="more">' + esc(t('moreCommits')) + '</button>';
+  if (!html) html = '<div class="empty">' + esc(t('noCommits')) + '</div>';
+  $('commits').innerHTML = html;
+}
+async function selectCommit(hash) {
+  S.commit = hash; S.file = null; S.data = null;
+  S.back = []; updateBack();                           // "back" retraces references followed inside one commit
+  renderCommits();
+  await guarded(async () => {
+    const data = await api('files', { commit: hash });
+    S.files = data.files; S.overviews = data.overviews; S.noteErrors = data.noteErrors; S.notesCost = data.notesCost;
+    renderFiles();
+    showOverview();
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Files of the commit, with the filters by type and by name
+// ---------------------------------------------------------------------------------------------------------------
+function extLabel(ext) { return ext || t('noExtension'); }
+function visibleFiles() {
+  const needle = $('fileSearch').value.trim().toLowerCase();
+  return S.files.filter(f => !S.hidden.has(f.ext) && (!needle || f.path.toLowerCase().includes(needle)));
+}
+function renderFiles() {
+  const counts = new Map();
+  for (const f of S.files) counts.set(f.ext, (counts.get(f.ext) || 0) + 1);
+  const exts = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  let chips = exts.map(([ext, n]) => '<span class="chip' + (S.hidden.has(ext) ? ' off' : '') + '" data-e="' + esc(ext) + '" title="' + esc(t('chipTip')) + '">' + esc(extLabel(ext)) + '<b>' + n + '</b></span>').join('');
+  if (exts.some(([ext]) => S.hidden.has(ext))) chips += '<span class="chip all" data-e="*">' + esc(t('showAll')) + '</span>';
+  $('chips').innerHTML = chips;
+
+  const list = visibleFiles();
+  $('fileCount').textContent = list.length === S.files.length ? S.files.length : t('countOf', list.length, S.files.length);
+  $('files').innerHTML = list.map(f => {
+    const slash = f.path.lastIndexOf('/');
+    const counts = f.binary ? '<span class="cnt">' + esc(t('binary')) + '</span>' : (f.added === null ? '' : '<span class="cnt"><span class="a">+' + f.added + '</span><span class="r">−' + f.deleted + '</span></span>');
+    const note = f.notes !== undefined ? '<span class="nt" title="' + esc(t('withNotes')) + '">✎ ' + f.notes + '</span>' : '';
+    return '<div class="file' + (S.file === f.path ? ' sel' : '') + '" data-p="' + esc(f.path) + '" title="' + esc(f.path) + '"><span class="st ' + f.status + '">' + f.status + '</span>' +
+      '<span class="nm"><div class="n">' + esc(f.path.slice(slash + 1)) + '</div>' + (slash > 0 ? '<div class="d">&lrm;' + esc(f.path.slice(0, slash)) + '</div>' : '') + '</span>' + note + counts + '</div>';
+  }).join('') || '<div class="empty">' + esc(t(S.files.length ? 'allHidden' : 'noFiles')) + '</div>';
+}
+function saveHidden() { localStorage.setItem('ai.hidden', JSON.stringify([...S.hidden])); }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Overview of the commit
+// ---------------------------------------------------------------------------------------------------------------
+function markdown(source) {
+  let html = esc(source || '');
+  // Every piece of code keeps its own text in data-ref: linkRefs asks the server which ones name a place in the code
+  html = html.replace(/`([^`\n]+)`/g, '<code data-ref="$1">$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  return html.split(/\n\s*\n/).map(block => {
+    const lines = block.split('\n').filter(l => l.trim() !== '');
+    if (!lines.length) return '';
+    if (lines.every(l => /^\s*[-•] /.test(l))) return '<ul>' + lines.map(l => '<li>' + l.replace(/^\s*[-•] /, '') + '</li>').join('') + '</ul>';
+    return '<p>' + lines.join('<br>') + '</p>';
+  }).join('');
+}
+function showOverview() {
+  S.file = null; S.data = null;
+  $('split').style.display = 'none'; $('stale').style.display = 'none'; $('overview').style.display = '';
+  $('path').textContent = ''; $('cnt').textContent = '';
+  for (const id of ['prevChg', 'nextChg', 'modeBtn', 'notesBtn']) $(id).disabled = true;
+  document.querySelectorAll('.file.sel').forEach(e => e.classList.remove('sel'));
+  if (!S.state || !S.state.repo) { $('overview').innerHTML = '<div class="msg">' + esc(t('pickToStart')) + '</div>'; return; }
+  const c = S.commits.find(x => x.hash === S.commit);
+  const title = S.commit === WORKING ? t('uncommitted') : (c ? c.subject : t('noCommit'));
+  const meta = S.commit === WORKING ? esc(t('workingMeta')) : (c ? '<span class="h">' + c.short + '</span> · ' + when(c.date) + ' · ' + esc(c.author) : '');
+  const added = S.files.reduce((n, f) => n + (f.added || 0), 0), deleted = S.files.reduce((n, f) => n + (f.deleted || 0), 0);
+  let html = '<div class="ov"><h1>' + esc(title) + '</h1><div class="meta">' + meta + ' · ' + esc(t('fileCount', S.files.length)) + ' · <span style="color:var(--add-tx)">+' + added + '</span> <span style="color:var(--del-tx)">−' + deleted + '</span></div>';
+  const number = n => (n || 0).toLocaleString(LANG);
+  for (const o of S.overviews) html += '<div class="box"><h3>' + esc(o.title || t('overview')) +
+    ' <span style="color:var(--dim);font-size:12px;font-weight:400" title="' + esc(t('notesCostTip', S.notesCost ? number(S.notesCost.charsPerToken) : '?')) + '">· ' + esc(t('aboutTokens', number(o.tokens))) + '</span></h3>' + markdown(o.overview) + '</div>';
+  for (const e of S.noteErrors || []) html += '<div class="box" style="color:var(--del-tx)">' + esc(t('notesUnreadable', e.name, e.error)) + '</div>';
+  const cost = S.notesCost;
+  if (cost && cost.repoFiles) html += '<div class="meta" title="' + esc(t('notesCostTip', number(cost.charsPerToken))) + '">' +
+    esc(t('notesCost', number(cost.tokens), cost.files, cost.earlier, number(cost.repoTokens), cost.repoFiles)) + '</div>';
+  const explained = S.files.filter(f => f.notes !== undefined);
+  if (explained.length) {
+    html += '<h2>' + esc(t('explainedFiles')) + '</h2>';
+    for (const f of explained) html += '<div class="item" data-p="' + esc(f.path) + '"><span class="st ' + f.status + '" style="font:600 10px var(--mono);padding:1px 4px;border-radius:4px">' + f.status + '</span><span class="p">' + esc(f.path.split('/').pop()) + '</span><span class="s">' + esc(f.summary || '') + '</span></div>';
+  } else if (S.files.length) {
+    html += '<h2>' + esc(t('explanations')) + '</h2><div class="box" style="color:var(--dim)">' + esc(t('noNotes')) + '</div>';
+  }
+  const key = (keys, text) => '<span>' + keys.map(k => '<kbd>' + k + '</kbd>').join(' ') + '</span><span>' + esc(t(text)) + '</span>';
+  html += '<h2>' + esc(t('keys')) + '</h2><div class="box keys">' + key(['↓', '↑'], 'keyFiles') + key(['N', 'P'], 'keyChanges') + key(['F'], 'keyFull') +
+    key(['B'], 'keySidebar') + key(['O'], 'keyOverview') + key(['⌫'], 'keyBack') + '</div></div>';
+  $('overview').innerHTML = html;
+  linkRefs($('overview'), '');
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// References: a name in a note that is also a place in the code becomes a link to it
+// ---------------------------------------------------------------------------------------------------------------
+// The notes say `Inventory.Add` or `Player`. The server knows the files of the commit and finds where that is.
+async function linkRefs(container, path) {
+  const commit = S.commit;
+  const codes = [...container.querySelectorAll('code[data-ref]')];
+  const names = [...new Set(codes.map(code => code.dataset.ref))];
+  if (!names.length || !commit) return;
+  let found;
+  try { found = (await api('refs', { commit, path }, { names })).refs; }
+  catch (error) { return; }                            // without links the notes still read the same
+  if (commit !== S.commit) return;
+  for (const code of codes) {
+    const target = found[code.dataset.ref];
+    if (!target || !code.isConnected) continue;
+    code.classList.add('ref');
+    code.dataset.to = JSON.stringify(target);
+    const file = target.path.split('/').pop();
+    code.title = file + (target.line ? t('refLine', target.line) : '') + (target.side === 'old' ? t('refOld') : '') + (target.inCommit ? '' : t('refUnchanged'));
+  }
+}
+function updateBack() { $('backBtn').disabled = !S.back.length; }
+async function followRef(target) {
+  S.back.push({ file: S.file, top: S.file ? $('right').scrollTop : $('overview').scrollTop });
+  updateBack();
+  if (target.path !== S.file || !S.data) await selectFile(target.path, false, true);
+  if (S.data && S.data.old && target.line) revealLine(target.side, target.line);
+}
+async function goBack() {
+  const place = S.back.pop();
+  updateBack();
+  if (!place) return;
+  if (!place.file) { showOverview(); $('overview').scrollTop = place.top; return; }
+  if (place.file !== S.file || !S.data) await selectFile(place.file, false, true);
+  $('right').scrollTop = place.top;
+}
+// Brings a line of the original (side 'old') or of the new file into view and lights it up for a moment
+function revealLine(side, line) {
+  const match = row => side === 'old' ? row.t !== 'add' && row.o === line - 1 : row.t !== 'del' && row.n === line - 1;
+  let index = S.view.findIndex(match);
+  if (index < 0) { S.reveal = true; render(false); index = S.view.findIndex(match); }   // it was folded away: unfold
+  if (index < 0) return;
+  jumpTo(index, false);
+  for (const pane of ['left', 'right']) {
+    const element = $(pane).firstElementChild.children[index];
+    if (!element) continue;
+    element.classList.remove('flash');
+    void element.offsetWidth;                          // restarts the animation when the same line is revealed twice
+    element.classList.add('flash');
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Syntax colours
+// ---------------------------------------------------------------------------------------------------------------
+const words = s => new Set(s.split(' '));
+const C_LIKE = { line: '//', block: ['/*', '*/'] };
+const LANGS = {
+  cs: { ...C_LIKE, pre: true, at: true, kw: words('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach get goto if implicit in int interface internal is lock long nameof namespace new null object operator out override params partial private protected public readonly ref return sbyte sealed set short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using var virtual void volatile when where while yield') },
+  js: { ...C_LIKE, tick: true, kw: words('abstract any as async await boolean break case catch class const continue debugger declare default delete do else enum export extends false finally for from function get if implements import in instanceof interface let new null number of private protected public readonly return set static string super switch this throw true try type typeof undefined var void while yield') },
+  py: { line: '#', triple: true, kw: words('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield self') },
+  c: { ...C_LIKE, pre: true, kw: words('auto bool break case catch char class const constexpr continue default delete do double else enum explicit extern false final float fn for friend func go goto if impl import inline int interface let long match mut namespace new nullptr operator override package private protected pub public return short signed sizeof static struct switch template this throw true try type typedef union unsigned use using var virtual void volatile while') },
+  shader: { ...C_LIKE, pre: true, kw: words('Shader Properties SubShader Pass Tags CGPROGRAM ENDCG HLSLPROGRAM ENDHLSL HLSLINCLUDE Fallback LOD Cull ZWrite ZTest Blend struct return if else for while void float float2 float3 float4 half half2 half3 half4 fixed fixed4 int uint bool sampler2D float4x4 float3x3 const static inline uniform in out inout discard true false') },
+  json: { strKeys: true, kw: words('true false null') },
+  sh: { line: '#', kw: words('if then else elif fi for in do done while case esac function return echo exit export local set') },
+  yaml: { yaml: true },
+};
+const EXT_LANG = {
+  cs: 'cs', js: 'js', jsx: 'js', mjs: 'js', cjs: 'js', ts: 'js', tsx: 'js', py: 'py', json: 'json', asmdef: 'json', shadergraph: 'json',
+  c: 'c', h: 'c', cpp: 'c', hpp: 'c', cc: 'c', java: 'c', go: 'c', rs: 'c', swift: 'c', kt: 'c', css: 'c', uss: 'c',
+  shader: 'shader', hlsl: 'shader', cginc: 'shader', glsl: 'shader', compute: 'shader',
+  sh: 'sh', ps1: 'sh', toml: 'sh', gitignore: 'sh',
+  yaml: 'yaml', yml: 'yaml', meta: 'yaml', asset: 'yaml', prefab: 'yaml', unity: 'yaml', controller: 'yaml', anim: 'yaml', mat: 'yaml',
+};
+const NUMBER = /(?:0x[\da-fA-F]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?[fFdDmMuUlL]*)/y;
+const IDENT = /[A-Za-z_][\w]*/y;
+
+// Splits every line of a file into [class, text] pieces. Comments and strings that span several lines are followed.
+function tokenize(lines, path) {
+  const cfg = LANGS[EXT_LANG[path.slice(path.lastIndexOf('.') + 1).toLowerCase()]];
+  if (!cfg) return lines.map(l => [['', l]]);
+  if (cfg.yaml) return lines.map(yamlLine);
+  let open = null;                                   // inside a block comment or a triple-quoted string: { end, cls }
+  return lines.map(line => {
+    const out = [], n = line.length;
+    const push = (cls, s) => { if (s) out.push([cls, s]); };
+    let i = 0;
+    while (i < n) {
+      if (open) {
+        const end = line.indexOf(open.end, i);
+        if (end < 0) { push(open.cls, line.slice(i)); i = n; }
+        else { push(open.cls, line.slice(i, end + open.end.length)); i = end + open.end.length; open = null; }
+        continue;
+      }
+      const ch = line[i];
+      if (ch === ' ' || ch === '\t') { let j = i; while (j < n && (line[j] === ' ' || line[j] === '\t')) j++; push('', line.slice(i, j)); i = j; continue; }
+      if (cfg.line && line.startsWith(cfg.line, i)) { push('cm', line.slice(i)); break; }
+      if (cfg.block && line.startsWith(cfg.block[0], i)) { open = { end: cfg.block[1], cls: 'cm' }; push('cm', cfg.block[0]); i += cfg.block[0].length; continue; }
+      if (cfg.triple && (line.startsWith('"""', i) || line.startsWith("'''", i))) { open = { end: line.substr(i, 3), cls: 'st' }; push('st', line.substr(i, 3)); i += 3; continue; }
+      if (cfg.pre && ch === '#' && !line.slice(0, i).trim()) { push('pp', line.slice(i)); break; }
+      const verbatim = cfg.at && (ch === '@' || ch === '$') && /^[@$]{1,2}"/.test(line.slice(i, i + 3)) && line.slice(i, i + 3).includes('@');
+      if (ch === '"' || ch === "'" || (ch === '`' && cfg.tick) || (cfg.at && (ch === '@' || ch === '$') && /^[@$]{1,2}"/.test(line.slice(i, i + 3)))) {
+        let j = i;
+        while (line[j] === '@' || line[j] === '$') j++;
+        const quote = line[j];
+        j++;
+        while (j < n) {
+          if (verbatim) { if (line[j] === '"' && line[j + 1] === '"') { j += 2; continue; } }
+          else if (line[j] === '\\') { j += 2; continue; }
+          if (line[j] === quote) { j++; break; }
+          j++;
+        }
+        j = Math.min(j, n);
+        const isKey = cfg.strKeys && /^\s*:/.test(line.slice(j));
+        push(isKey ? 'ky' : 'st', line.slice(i, j)); i = j; continue;
+      }
+      NUMBER.lastIndex = i;
+      if (ch >= '0' && ch <= '9') { const m = NUMBER.exec(line); if (m) { push('nu', m[0]); i += m[0].length; continue; } }
+      IDENT.lastIndex = i;
+      const id = IDENT.exec(line);
+      if (id) {
+        const word = id[0], after = line.slice(i + word.length).match(/^\s*(.)/);
+        let cls = '';
+        if (cfg.kw && cfg.kw.has(word)) cls = 'kw';
+        else if (after && after[1] === '(') cls = 'fn';
+        else if (word[0] >= 'A' && word[0] <= 'Z' && !cfg.strKeys) cls = 'ty';
+        push(cls, word); i += word.length; continue;
+      }
+      push('', ch); i++;
+    }
+    return out.length ? out : [['', '']];
+  });
+}
+function yamlLine(line) {
+  if (/^(---|%)/.test(line)) return [['pp', line]];
+  const comment = line.match(/^\s*#.*/);
+  if (comment) return [['cm', line]];
+  const m = line.match(/^(\s*(?:- )?)([^\s:#][^:#]*?)(:)(\s.*|$)/);
+  if (!m) return [['', line]];
+  return [['', m[1]], ['ky', m[2]], ['', m[3]], [/^\s*[-\d.]+\s*$/.test(m[4]) ? 'nu' : 'st', m[4]]];
+}
+// The HTML of a line. `ranges` are the [start, end) characters that changed inside it.
+function paint(tokens, ranges) {
+  let html = '', pos = 0, r = 0;
+  for (const [cls, textPiece] of tokens) {
+    let start = 0;
+    const len = textPiece.length;
+    while (start < len) {
+      while (ranges && r < ranges.length && ranges[r][1] <= pos + start) r++;
+      const range = ranges && ranges[r];
+      let end = len, changed = false;
+      if (range) {
+        if (range[0] <= pos + start) { changed = true; end = Math.min(len, range[1] - pos); }
+        else end = Math.min(len, range[0] - pos);
+      }
+      const piece = esc(textPiece.slice(start, end));
+      const klass = (cls + (changed ? ' x' : '')).trim();
+      html += klass ? '<span class="' + klass + '">' + piece + '</span>' : piece;
+      start = end;
+    }
+    pos += len;
+  }
+  return html;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// What changed inside a pair of lines
+// ---------------------------------------------------------------------------------------------------------------
+function wordDiff(a, b) {
+  const ta = a.match(/\w+|\s+|[^\w\s]/g) || [], tb = b.match(/\w+|\s+|[^\w\s]/g) || [];
+  const n = ta.length, m = tb.length;
+  if (!n || !m || n > 400 || m > 400) return null;
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = ta[i] === tb[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const ra = [], rb = [];
+  let i = 0, j = 0, pa = 0, pb = 0, same = 0;
+  const mark = (list, start, end) => { const last = list[list.length - 1]; if (last && last[1] === start) last[1] = end; else list.push([start, end]); };
+  while (i < n || j < m) {
+    if (i < n && j < m && ta[i] === tb[j]) { if (ta[i].trim()) same += ta[i].length; pa += ta[i].length; pb += tb[j].length; i++; j++; }
+    else if (j < m && (i === n || dp[i][j + 1] >= dp[i + 1][j])) { mark(rb, pb, pb + tb[j].length); pb += tb[j].length; j++; }
+    else { mark(ra, pa, pa + ta[i].length); pa += ta[i].length; i++; }
+  }
+  const weight = Math.max(a.replace(/\s/g, '').length, b.replace(/\s/g, '').length) || 1;
+  if (same / weight < 0.3) return null;               // two unrelated lines: marking single words would only confuse
+  return { a: ra, b: rb };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The two panes
+// ---------------------------------------------------------------------------------------------------------------
+async function selectFile(path, force) {
+  S.file = path; S.expanded = new Set(); S.reveal = false;
+  document.querySelectorAll('.file').forEach(e => e.classList.toggle('sel', e.dataset.p === path));
+  const selected = document.querySelector('.file.sel');
+  if (selected) selected.scrollIntoView({ block: 'nearest' });
+  await guarded(async () => {
+    const data = await api('file', { commit: S.commit, path, force: force ? 1 : 0 });
+    if (S.file !== path) return;                       // another file was chosen while this one was loading
+    S.data = data;
+    showFile();
+  });
+}
+function showFile() {
+  const d = S.data, entry = S.files.find(f => f.path === d.path) || {};
+  const slash = d.path.lastIndexOf('/');
+  $('path').innerHTML = '<span class="dir">' + esc(d.path.slice(0, slash + 1)) + '</span>' + esc(d.path.slice(slash + 1));
+  $('path').title = d.path;
+  $('cnt').innerHTML = entry.added === null || entry.added === undefined ? '' : '<span class="a">+' + entry.added + '</span><span class="r">−' + entry.deleted + '</span>';
+  $('overview').style.display = 'none';
+  $('stale').style.display = d.notesStale && (d.notes || []).length ? 'block' : 'none';
+  for (const id of ['prevChg', 'nextChg', 'modeBtn', 'notesBtn']) $(id).disabled = false;
+  if (d.binary || d.tooLarge) {
+    $('split').style.display = 'none'; $('overview').style.display = '';
+    $('overview').innerHTML = '<div class="msg">' + (d.binary ? esc(t('isBinary')) :
+      esc(t('tooLarge', (d.tooLarge / 1048576).toFixed(1))) + '<br><button id="forceLoad">' + esc(t('loadAnyway')) + '</button>') + '</div>';
+    return;
+  }
+  $('split').style.display = 'flex';
+  const c = S.commits.find(x => x.hash === S.commit);
+  $('lt').textContent = d.status === 'A' ? t('didNotExist') : (d.oldPath !== d.path ? d.oldPath : t('beforeCommit'));
+  $('rt').textContent = d.status === 'D' ? t('wasDeleted') : (S.commit === WORKING ? t('workingFolder') : (c ? c.short : ''));
+  if (d.status === '=') $('lt').textContent = $('rt').textContent = t('unchangedFile');
+  d.oldTokens = tokenize(d.old, d.oldPath);
+  d.newTokens = tokenize(d.new, d.path);
+  buildRows();
+  render(true);
+}
+
+// One entry per visual row, the same for both panes: unchanged, removed, added.
+function buildRows() {
+  const d = S.data, rows = [];
+  let o = 0, n = 0;
+  d.hunks.forEach((h, index) => {
+    const oldBegin = (h.oc ? h.os : h.os + 1) - 1, newBegin = (h.nc ? h.ns : h.ns + 1) - 1;
+    while (o < oldBegin && n < newBegin) rows.push({ t: 'ctx', o: o++, n: n++ });
+    const firstDel = rows.length;
+    for (let k = 0; k < h.oc; k++) rows.push({ t: 'del', o: o++, h: index });
+    const firstAdd = rows.length;
+    for (let k = 0; k < h.nc; k++) rows.push({ t: 'add', n: n++, h: index });
+    for (let k = 0; k < Math.min(h.oc, h.nc); k++) {   // line k removed <-> line k added: mark the words that differ
+      const diff = wordDiff(d.old[rows[firstDel + k].o], d.new[rows[firstAdd + k].n]);
+      if (diff) { rows[firstDel + k].x = diff.a; rows[firstAdd + k].x = diff.b; }
+    }
+  });
+  while (o < d.old.length && n < d.new.length) rows.push({ t: 'ctx', o: o++, n: n++ });
+  while (o < d.old.length) rows.push({ t: 'del', o: o++ });
+  while (n < d.new.length) rows.push({ t: 'add', n: n++ });
+
+  // Where each note goes: right after the last line it talks about
+  const after = new Map();
+  (d.notes || []).forEach((note, j) => {
+    const range = note.lines || [1, 1], last = (range[1] || range[0]) - 1, first = range[0] - 1, old = note.side === 'old';
+    let target = -1;
+    rows.forEach((row, i) => {
+      const line = old ? (row.t !== 'add' ? row.o : undefined) : (row.t !== 'del' ? row.n : undefined);
+      if (line === undefined) return;
+      if (line >= first && line <= last) { row.noted = true; target = i; }
+    });
+    if (target < 0) target = rows.length - 1;
+    if (!after.has(target)) after.set(target, []);
+    after.get(target).push(j);
+  });
+  S.rows = rows; S.after = after;
+}
+
+function render(resetScroll) {
+  const d = S.data, rows = S.rows, collapse = !S.reveal && (S.mode === 'changes' || rows.length > 8000);
+  $('modeBtn').textContent = t(collapse ? 'changesOnly' : 'wholeFile');
+  $('modeBtn').classList.toggle('on', collapse);
+
+  // In "only the changes" mode, long unchanged stretches fold into one row that opens with a click
+  const keep = new Uint8Array(rows.length);
+  if (collapse) {
+    const context = 4;
+    rows.forEach((row, i) => {
+      if (row.t === 'ctx' && !row.noted && !S.after.has(i)) return;
+      for (let k = Math.max(0, i - context); k <= Math.min(rows.length - 1, i + context); k++) keep[k] = 1;
+    });
+  } else keep.fill(1);
+
+  const digits = String(Math.max(d.old.length, d.new.length, 1)).length;
+  const left = [], right = [];
+  const view = [];                                     // what each visual row is, for navigation and the ruler
+  const line = (cls, number, mark, tokens, ranges, noted) =>
+    '<div class="row ' + cls + (noted ? ' noted' : '') + '"><span class="ln">' + number + '</span><span class="mk">' + mark + '</span><span class="tx">' + paint(tokens, ranges) + '</span></div>';
+  const noteRow = (cardClass, title, range, body, key) => {
+    left.push('<div class="row sp" data-s="' + key + '"></div>');
+    right.push('<div class="row note" data-n="' + key + '"><div class="card ' + cardClass + '"><div class="t">' + esc(title) + (range ? '<small>' + range + '</small>' : '') + '</div>' + markdown(body) + '</div></div>');
+    view.push({ t: 'note' });
+  };
+  if (d.summary) noteRow('sum', t('inThisFile'), '', d.summary, 'sum');
+
+  let i = 0;
+  while (i < rows.length) {
+    if (!keep[i]) {
+      let j = i;
+      while (j < rows.length && !keep[j]) j++;
+      if (j - i >= 6 && !S.expanded.has(i)) {
+        const gap = '<div class="row gap" data-g="' + i + '">' + esc(t('gap', j - i)) + '</div>';
+        left.push(gap); right.push(gap); view.push({ t: 'gap' });
+        i = j; continue;
+      }
+      for (let k = i; k < j; k++) drawRow(k);          // too short to be worth folding, or opened by the user
+      i = j;
+      continue;
+    }
+    drawRow(i);
+    i++;
+  }
+  function drawRow(k) {
+    const row = rows[k];
+    if (row.t === 'ctx') {
+      left.push(line('ctx', row.o + 1, '', d.oldTokens[row.o], null, false));
+      right.push(line('ctx', row.n + 1, '', d.newTokens[row.n], null, row.noted));
+    } else if (row.t === 'del') {
+      // The original is shown as it was, with no colours: what was removed is marked on the right, in red
+      left.push(line('ctx', row.o + 1, '', d.oldTokens[row.o], null, false));
+      right.push(line('del', row.o + 1, '−', d.oldTokens[row.o], row.x, row.noted));
+    } else {
+      left.push('<div class="row fill"></div>');
+      right.push(line('add', row.n + 1, '+', d.newTokens[row.n], row.x, row.noted));
+    }
+    view.push({ t: row.t, h: row.h, o: row.o, n: row.n });
+    for (const j of S.after.get(k) || []) {
+      const note = d.notes[j], range = (note.lines || []).map(n => parseInt(n, 10) || 1);   // numbers only: this goes into the page as it is
+      const label = t(note.side === 'old' ? 'removedLines' : 'lines') + range[0] + (range[1] && range[1] !== range[0] ? '–' + range[1] : '');
+      noteRow('', note.title || t('note'), label, note.text || '', j);
+    }
+  }
+
+  const leftPane = $('left'), rightPane = $('right'), keepTop = rightPane.scrollTop;
+  document.documentElement.style.setProperty('--gw', (digits * 8 + 20) + 'px');
+  leftPane.innerHTML = '<div class="inner">' + left.join('') + '</div>';
+  rightPane.innerHTML = '<div class="inner">' + right.join('') + '</div>';
+  S.view = view;
+
+  // First row of each run of changed lines: where N and P jump to
+  S.changes = [];
+  view.forEach((row, index) => {
+    const changed = row.t === 'add' || row.t === 'del';
+    const previous = view[index - 1];
+    if (changed && !(previous && (previous.t === 'add' || previous.t === 'del'))) S.changes.push(index);
+  });
+  syncNotes();
+  drawRuler();
+  linkRefs(rightPane, d.path);
+  if (resetScroll) {
+    leftPane.scrollTop = rightPane.scrollTop = 0; leftPane.scrollLeft = rightPane.scrollLeft = 0;
+    if (!d.summary && S.changes.length) jumpTo(S.changes[0], false);
+  } else leftPane.scrollTop = rightPane.scrollTop = keepTop;
+}
+
+// The left pane leaves as much empty room as each note takes on the right, so the lines stay face to face
+function syncNotes() {
+  const rightPane = $('right'), leftPane = $('left');
+  const width = rightPane.clientWidth;
+  rightPane.style.setProperty('--pw', width + 'px');
+  leftPane.style.setProperty('--pw', leftPane.clientWidth + 'px');
+  rightPane.querySelectorAll('.row.note').forEach(note => {
+    const spacer = leftPane.querySelector('.row.sp[data-s="' + note.dataset.n + '"]');
+    if (spacer) spacer.style.height = note.getBoundingClientRect().height + 'px';   // not offsetHeight: it rounds, and the error adds up
+  });
+  drawRulerThumb();
+}
+function rowElement(index) { return $('right').firstElementChild.children[index]; }
+function jumpTo(index, smooth) {
+  const element = rowElement(index);
+  if (!element) return;
+  $('right').scrollTo({ top: Math.max(0, element.offsetTop - 110), behavior: smooth ? 'smooth' : 'auto' });
+}
+function jumpChange(direction) {
+  if (!S.data || !S.changes.length) return;
+  const position = $('right').scrollTop + 112;
+  let target;
+  if (direction > 0) target = S.changes.find(index => rowElement(index).offsetTop > position + 2);
+  else target = [...S.changes].reverse().find(index => rowElement(index).offsetTop < position - 2);
+  if (target !== undefined) jumpTo(target, true);
+}
+function drawRuler() {
+  const total = S.view.length || 1;
+  let html = '', start = -1, kind = '';
+  const flush = end => { if (start >= 0) html += '<i class="' + kind + '" style="top:' + (start / total * 100) + '%;height:' + ((end - start) / total * 100) + '%"></i>'; start = -1; };
+  S.view.forEach((row, index) => {
+    const k = row.t === 'add' ? 'a' : row.t === 'del' ? 'd' : row.t === 'note' ? 'n' : '';
+    if (k !== kind || !k) { flush(index); kind = k; if (k) start = index; }
+  });
+  flush(total);
+  $('ruler').innerHTML = html + '<div class="thumb"></div>';
+  drawRulerThumb();
+}
+function drawRulerThumb() {
+  const pane = $('right'), thumb = $('ruler').querySelector('.thumb');
+  if (!thumb || !pane.scrollHeight) return;
+  thumb.style.top = (pane.scrollTop / pane.scrollHeight * 100) + '%';
+  thumb.style.height = (pane.clientHeight / pane.scrollHeight * 100) + '%';
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------------------------------------------
+function stepFile(direction) {
+  const list = visibleFiles();
+  if (!list.length) return;
+  const index = list.findIndex(f => f.path === S.file);
+  const next = index < 0 ? (direction > 0 ? 0 : list.length - 1) : index + direction;
+  if (next >= 0 && next < list.length) selectFile(list[next].path);
+}
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+}
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('ai.theme', theme);
+}
+
+$('commits').addEventListener('click', e => {
+  if (e.target.id === 'more') return guarded(() => loadCommits(false));
+  const item = e.target.closest('.commit');
+  if (item) selectCommit(item.dataset.h);
+});
+$('files').addEventListener('click', e => { const item = e.target.closest('.file'); if (item) selectFile(item.dataset.p); });
+$('chips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const ext = chip.dataset.e;
+  if (ext === '*') S.hidden.clear();
+  else if (e.altKey) { S.hidden = new Set(S.files.map(f => f.ext).filter(x => x !== ext)); }
+  else if (S.hidden.has(ext)) S.hidden.delete(ext);
+  else S.hidden.add(ext);
+  saveHidden(); renderFiles();
+});
+for (const id of ['overview', 'right']) {
+  $(id).addEventListener('click', e => {
+    const code = e.target.closest('code.ref');
+    if (code) followRef(JSON.parse(code.dataset.to));
+  });
+}
+$('backBtn').addEventListener('click', goBack);
+$('overview').addEventListener('click', e => {
+  if (e.target.closest('code.ref')) return;
+  if (e.target.id === 'forceLoad') return selectFile(S.file, true);
+  const item = e.target.closest('.item');
+  if (item) { S.hidden.delete((S.files.find(f => f.path === item.dataset.p) || {}).ext); saveHidden(); renderFiles(); selectFile(item.dataset.p); }
+});
+$('fileSearch').addEventListener('input', renderFiles);
+let searchTimer;
+$('commitSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => guarded(() => loadCommits(true)), 300); });
+$('allBranches').addEventListener('change', () => guarded(() => loadCommits(true)));
+$('ovBtn').addEventListener('click', showOverview);
+$('prevFile').addEventListener('click', () => stepFile(-1));
+$('nextFile').addEventListener('click', () => stepFile(1));
+$('prevChg').addEventListener('click', () => jumpChange(-1));
+$('nextChg').addEventListener('click', () => jumpChange(1));
+$('modeBtn').addEventListener('click', () => { S.mode = S.mode === 'changes' ? 'full' : 'changes'; localStorage.setItem('ai.mode', S.mode); S.expanded = new Set(); if (S.data && S.data.old) render(false); });
+$('notesBtn').addEventListener('click', () => { const off = document.body.classList.toggle('nonotes'); $('notesBtn').classList.toggle('on', !off); syncNotes(); });
+$('sideBtn').addEventListener('click', () => { document.body.classList.toggle('noside'); syncNotes(); });
+$('fullBtn').addEventListener('click', toggleFull);
+$('themeBtn').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
+$('repoBtn').addEventListener('click', () => openModal());
+$('closeModal').addEventListener('click', () => $('modal').classList.remove('open'));
+$('openRepo').addEventListener('click', () => chooseRepo($('repoPath').value));
+$('repoPath').addEventListener('keydown', e => { if (e.key === 'Enter') chooseRepo($('repoPath').value); });
+$('recent').addEventListener('click', e => { if (e.target.textContent) chooseRepo(e.target.textContent); });
+$('browse').addEventListener('click', async () => {
+  $('repoErr').textContent = t('pickerOpen');
+  try { const picked = await api('pick-folder'); $('repoErr').textContent = ''; if (picked.path) { $('repoPath').value = picked.path; chooseRepo(picked.path); } }
+  catch (error) { $('repoErr').textContent = error.message; }
+});
+for (const pane of ['left', 'right']) {
+  $(pane).addEventListener('click', e => {
+    const gap = e.target.closest('.row.gap');
+    if (gap) { S.expanded.add(+gap.dataset.g); render(false); }
+  });
+}
+$('ruler').addEventListener('click', e => {
+  const box = $('ruler').getBoundingClientRect(), pane = $('right');
+  pane.scrollTop = (e.clientY - box.top) / box.height * pane.scrollHeight - pane.clientHeight / 2;
+});
+
+// The two panes scroll together, top to bottom. Sideways each one scrolls on its own.
+let leader = null, leaderTimer;
+function follow(source, target) {
+  source.addEventListener('scroll', () => {
+    if (leader && leader !== source) return;
+    leader = source;
+    target.scrollTop = source.scrollTop;
+    clearTimeout(leaderTimer);
+    leaderTimer = setTimeout(() => { leader = null; }, 80);
+    drawRulerThumb();
+  }, { passive: true });
+}
+follow($('left'), $('right')); follow($('right'), $('left'));
+
+// The handle between the panes
+(function () {
+  const split = $('split'), divider = $('divider');
+  const apply = ratio => { split.style.setProperty('--r', ratio); localStorage.setItem('ai.ratio', ratio); syncNotes(); };
+  split.style.setProperty('--r', localStorage.getItem('ai.ratio') || .5);
+  divider.addEventListener('pointerdown', e => {
+    divider.setPointerCapture(e.pointerId); divider.classList.add('drag');
+    const move = ev => { const box = split.getBoundingClientRect(); apply(Math.min(.85, Math.max(.15, (ev.clientX - box.left) / box.width))); };
+    const up = () => { divider.classList.remove('drag'); divider.removeEventListener('pointermove', move); divider.removeEventListener('pointerup', up); };
+    divider.addEventListener('pointermove', move); divider.addEventListener('pointerup', up);
+  });
+  divider.addEventListener('dblclick', () => apply(.5));
+})();
+new ResizeObserver(() => { if (S.data && S.data.old) syncNotes(); }).observe($('right'));
+document.addEventListener('fullscreenchange', updateFullButton);
+// The language is kept by the server, in the settings file: the browser would forget it when the port changes
+$('langBtn').addEventListener('click', async () => {
+  const next = LANG === 'en' ? 'it' : 'en';
+  try { S.state = await api('language', { value: next }); } catch (error) { status(error.message, true); }
+  applyLanguage(next);
+  if (S.state) applyState(S.state);
+  renderCommits(); renderFiles();
+  if (S.data && S.data.old) { const top = $('right').scrollTop; showFile(); $('right').scrollTop = top; }
+  else showOverview();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if ($('modal').classList.contains('open')) { if (e.key === 'Escape') $('modal').classList.remove('open'); return; }
+  const key = e.key.toLowerCase();
+  if (e.key === 'ArrowDown' || key === 'j') stepFile(1);
+  else if (e.key === 'ArrowUp' || key === 'k') stepFile(-1);
+  else if (key === 'n') jumpChange(1);
+  else if (key === 'p') jumpChange(-1);
+  else if (key === 'f') toggleFull();
+  else if (key === 'b') $('sideBtn').click();
+  else if (key === 'o') showOverview();
+  else if (e.key === 'Backspace') goBack();
+  else return;
+  e.preventDefault();
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------------------------------------------
+setTheme(localStorage.getItem('ai.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+applyLanguage('en');
+(async function () {
+  try {
+    const state = await api('state');
+    applyLanguage(state.language);
+    applyState(state);
+    showOverview();
+    if (S.state.repo) await guarded(() => loadCommits(true));
+    else openModal();
+  } catch (error) { status(error.message, true); }
+})();
+</script>
+</body>
+</html>
